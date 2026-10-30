@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #0d1118; }
+  * { box-sizing: border-box; }
+  #cam { position: absolute; inset: 0; perspective: 1500px; perspective-origin: 540px 760px; overflow: hidden; background: #0f1a14; }
+  .p3 { position: absolute; left: 0; top: 0; transform-style: preserve-3d; transform-origin: 0 0; }
+  .f { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .lbl { position: absolute; left: 0; top: 0; transform-origin: 0 0; white-space: nowrap;
+         font: 800 30px "Inter Display", Inter, sans-serif; letter-spacing: 2px; color: #e7b866;
+         background: #0d1118; border: 3px solid #e7b866; border-radius: 40px; padding: 6px 22px; }
+  .roofTag { position: absolute; font: 900 22px "Inter Display", Inter, sans-serif; color: #e7b866;
+             background: #0d1118; border: 2px solid #e7b866; border-radius: 14px; padding: 1px 8px; letter-spacing: 1px;
+             transform: translate(-50%, -50%); white-space: nowrap; }
+  svg text { font-family: "Inter Display", Inter, sans-serif; }
+  #front, #overlay { position: absolute; left: 0; top: 0; }
+</style>
+</head>
+<body>
+<div id="cam"><div id="world" class="p3"></div></div>
+<svg id="front" width="1080" height="1920" viewBox="0 0 1080 1920" style="opacity:0"></svg>
+<svg id="overlay" width="1080" height="1920" viewBox="0 0 1080 1920"></svg>
+
+<script>
+const GOLD = "#e7b866";
+const NS = "http://www.w3.org/2000/svg";
+const lerp = (a, b, x) => a + (b - a) * x;
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const ease = (x) => { x = clamp(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+function div(parent, cls, style) {
+  const d = document.createElement("div"); d.className = cls || "";
+  Object.assign(d.style, style || {}); parent.appendChild(d); return d;
+}
+function sv(tag, attrs, parent, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+/* =====================================================================
+   CENA 1 — MAQUETE 3D (coordenadas da foto aérea, 932 x 1760)
+   ===================================================================== */
+const world = document.getElementById("world");
+
+// ---------- chão (SVG plano) ----------
+const ground = sv("svg", { width: 2600, height: 3400, viewBox: "-800 -900 2600 3400" });
+Object.assign(ground.style, { position: "absolute", left: "-800px", top: "-900px" });
+world.appendChild(ground);
+sv("rect", { x: -800, y: -900, width: 2600, height: 3400, fill: "#12201a" }, ground);
+// mata em volta
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+for (let i = 0; i < 420; i++) {
+  const x = -800 + rnd() * 2600, y = -900 + rnd() * 3400;
+  if (x > 40 && x < 830 && y > 10 && y < 1680) continue;
+  sv("circle", { cx: x, cy: y, r: 18 + rnd() * 30, fill: rnd() > 0.5 ? "#1b3324" : "#17291f" }, ground);
+}
+sv("rect", { x: 830, y: 380, width: 220, height: 640, fill: "#2b2620" }, ground); // terreno ao lado
+// rua pública (embaixo)
+sv("rect", { x: -800, y: 1655, width: 2600, height: 110, fill: "#23272e" }, ground);
+for (let x = -780; x < 1800; x += 70) sv("rect", { x, y: 1706, width: 36, height: 5, fill: "#5d636e" }, ground);
+sv("rect", { x: -800, y: 1648, width: 2600, height: 8, fill: "#3a3f48" }, ground);
+// terreno do condomínio
+const fencePts = [[70,40],[800,40],[800,1620],[510,1620],[510,1520],[330,1520],[330,1650],[70,1650]];
+sv("polygon", { points: fencePts.map(p => p.join(",")).join(" "), fill: "#24402c" }, ground);
+// corredor de acesso (fora da portaria): motos + carros
+sv("rect", { x: 330, y: 1520, width: 180, height: 135, fill: "#33373f" }, ground);
+for (let x = 428; x < 506; x += 13) sv("rect", { x, y: 1526, width: 1.5, height: 24, fill: "#fff", opacity: 0.35 }, ground);
+for (let y = 1562; y < 1640; y += 18) sv("rect", { x: 440, y, width: 66, height: 1.5, fill: "#fff", opacity: 0.3 }, ground);
+// rua central + estacionamentos + calçadão
+sv("rect", { x: 330, y: 70, width: 90, height: 1590, fill: "#272b32" }, ground);
+for (let y = 110; y < 1500; y += 46) sv("rect", { x: 387, y, width: 4, height: 22, fill: GOLD, opacity: 0.75 }, ground);
+sv("rect", { x: 296, y: 70, width: 30, height: 1450, fill: "#5a5f69" }, ground);             // calçada (lado esquerdo)
+for (let y = 72; y < 1520; y += 9) sv("rect", { x: 296, y, width: 30, height: 0.8, fill: "#000", opacity: 0.25 }, ground);
+sv("rect", { x: 309, y: 70, width: 8, height: 1450, fill: "#e0b43c" }, ground);             // piso tátil
+for (let y = 72; y < 1520; y += 4) sv("rect", { x: 310, y, width: 6, height: 1.2, fill: "#a8841f" }, ground);
+sv("rect", { x: 420, y: 140, width: 35, height: 1375, fill: "#30343c" }, ground);
+sv("rect", { x: 326, y: 140, width: 32, height: 1375, fill: "#30343c" }, ground);           // vagas lado esquerdo
+for (let y = 100; y < 1515; y += 14) {
+  if (y > 140) sv("rect", { x: 420, y, width: 35, height: 1.2, fill: "#fff", opacity: 0.22 }, ground);
+  if (y > 140) sv("rect", { x: 326, y, width: 32, height: 1.2, fill: "#fff", opacity: 0.22 }, ground);
+}
+sv("rect", { x: 455, y: 140, width: 3, height: 1375, fill: "#4a4f58" }, ground);
+// poças de luz (postes e arandelas)
+const gdefs = sv("defs", {}, ground);
+gdefs.innerHTML = '<radialGradient id="pool"><stop offset="0" stop-color="#ffd98a" stop-opacity=".55"/><stop offset="1" stop-color="#ffd98a" stop-opacity="0"/></radialGradient>';
+for (let y = 180; y < 1480; y += 120) sv("ellipse", { cx: 313, cy: y, rx: 34, ry: 34, fill: "url(#pool)" }, ground);
+sv("rect", { x: 300, y: 60, width: 190, height: 80, fill: "#3b3f47" }, ground); // fim da rua
+for (let x = 306; x < 486; x += 16) sv("rect", { x, y: 66, width: 1.5, height: 30, fill: "#fff", opacity: 0.3 }, ground);
+// caminhos até os blocos
+for (const y of [255, 545, 855, 1160]) sv("rect", { x: 490, y, width: 70, height: 5, fill: "#5b606a" }, ground);
+// quadra de areia, playground, salão (pisos)
+sv("rect", { x: 565, y: 1345, width: 175, height: 85, fill: "#9a8458" }, ground);
+sv("rect", { x: 575, y: 1352, width: 155, height: 71, fill: "none", stroke: "#f3e3c3", "stroke-width": 1.5, opacity: 0.6 }, ground);
+sv("line", { x1: 652, y1: 1352, x2: 652, y2: 1423, stroke: "#f3e3c3", "stroke-width": 1.5, opacity: 0.6 }, ground);
+sv("rect", { x: 652, y: 1475, width: 88, height: 125, fill: "#7c6847" }, ground);
+sv("rect", { x: 540, y: 1462, width: 100, height: 126, fill: "#4a4f58" }, ground);
+// sombras suaves dos prédios
+const ROWS_L = [[100, 290], [300, 590], [600, 895], [905, 1200], [1210, 1500]];
+const ROWS_R = [[290, 590], [600, 895], [905, 1200]];
+for (const [a, b] of ROWS_L) sv("rect", { x: 126, y: a + 8, width: 180, height: b - a, fill: "#000", opacity: 0.35 }, ground);
+for (const [a, b] of ROWS_R) sv("rect", { x: 561, y: a + 8, width: 185, height: b - a, fill: "#000", opacity: 0.35 }, ground);
+sv("ellipse", { cx: 175, cy: 1600, rx: 16, ry: 60, fill: "#000", opacity: 0.4, transform: "rotate(-25 175 1600)" }, ground); // sombra da torre
+
+// ---------- caixas 3D ----------
+function face(g, style) { return div(g, "f", style); }
+function box(x, y, z, w, d, h, c) {
+  const g = div(world, "p3", { width: w + "px", height: d + "px", transform: `translate3d(${x}px,${y}px,${z}px)` });
+  face(g, { width: w + "px", height: h + "px", transform: "rotateX(90deg)", background: c.n || c.s }); // norte
+  face(g, { width: h + "px", height: d + "px", transform: "rotateY(-90deg)", background: c.w || c.e }); // oeste
+  face(g, { width: h + "px", height: d + "px", transform: `translateX(${w}px) rotateY(-90deg)`, background: c.e }); // leste
+  face(g, { width: w + "px", height: h + "px", transform: `translateY(${d}px) rotateX(90deg)`, background: c.s }); // sul
+  const top = face(g, { width: w + "px", height: d + "px", transform: `translateZ(${h}px)`, background: c.top });
+  g.top = top;
+  return g;
+}
+function cyl(cx, cy, z, r, h, side, top, n = 12) {
+  const g = div(world, "p3", { transform: `translate3d(${cx}px,${cy}px,${z}px)` });
+  const fw = 2 * r * Math.sin(Math.PI / n) + 0.6, ap = r * Math.cos(Math.PI / n);
+  for (let i = 0; i < n; i++) {
+    const shade = 0.75 + 0.25 * Math.cos((i / n) * 2 * Math.PI - 1.2);
+    face(g, { width: fw + "px", height: h + "px", left: -fw / 2 + "px", transformOrigin: `${fw / 2}px 0`,
+      transform: `rotateZ(${(i / n) * 360}deg) translateY(${ap}px) rotateX(90deg)`, background: side, filter: `brightness(${shade})` });
+  }
+  face(g, { width: 2 * r + "px", height: 2 * r + "px", left: -r + "px", top: -r + "px", borderRadius: "50%",
+    transform: `translateZ(${h}px)`, background: top });
+  return g;
+}
+// paredes com janelas
+const WIN = "#e6c27c", WALL = "#d9ccb0", BAND = "#b4b7bc", BANDH = 10;
+const wallNS = `linear-gradient(180deg, ${BAND} 0 ${BANDH}px, transparent ${BANDH}px), repeating-linear-gradient(0deg, ${WALL} 0 5px, transparent 5px 14px), repeating-linear-gradient(90deg, ${WALL} 0 6px, ${WIN} 6px 11px, ${WALL} 11px 16px)`;
+const wallEW = `linear-gradient(90deg, ${BAND} 0 ${BANDH}px, transparent ${BANDH}px), repeating-linear-gradient(90deg, ${WALL} 0 5px, transparent 5px 14px), repeating-linear-gradient(0deg, ${WALL} 0 6px, ${WIN} 6px 11px, ${WALL} 11px 16px)`;
+const wallEWd = `linear-gradient(rgba(0,0,0,.22),rgba(0,0,0,.22)), ${wallEW}`;
+const endWall = `linear-gradient(180deg, ${BAND} 0 ${BANDH}px, ${WALL} ${BANDH}px)`;          // pontas das alas: sem janelas
+const endWallD = `linear-gradient(rgba(0,0,0,.18),rgba(0,0,0,.18)), ${endWall}`;
+const roof = "linear-gradient(90deg, #9aa0aa 0 48%, #6f7580 52% 100%)";
+const H = 72; // 5 andares
+function wing(x, y, d) { box(x, y, 0, 64, d, H, { top: roof, n: endWallD, s: endWall, w: wallEW, e: wallEWd }); }
+function hRow(x0, a, b) {
+  wing(x0, a, b - a); wing(x0 + 111, a, b - a);
+}
+function building(x, y, w, d) {
+  box(x, y, 0, w, d, H, { top: "linear-gradient(90deg, #a3a9b3 0 49%, #c2c7cf 49.5% 50.5%, #737a86 51% 100%)", n: wallNS, s: wallNS, w: wallEW, e: wallEWd });
+}
+function link(x, y) { box(x, y, 0, 36, 26, H - 8, { top: "#7c828d", n: "#4e5563", s: "#5a6272", w: "#4e5563", e: "#444b58" }); }
+function rowTag(x, y, label) {
+  const t = div(world, "roofTag", {}); t.textContent = label;
+  t.style.left = x + "px"; t.style.top = y + "px"; t.style.transform += ` translateZ(${H + 2}px)`;
+  t.style.transform = `translate3d(0,0,${H + 2}px) translate(-50%,-50%)`;
+}
+// cada prédio = 2 blocos (metade de baixo e metade de cima). Esquerda sobe A→I; direita sobe J (perto da quadra) → O
+const TAGS_L = [["I"], ["G", "H"], ["E", "F"], ["C", "D"], ["A", "B"]]; // [metade de baixo, metade de cima]
+const TAGS_R = [["N", "O"], ["L", "M"], ["J", "K"]];
+ROWS_L.forEach(([a, b], i) => {
+  hRow(120, a, b);
+  const tl = TAGS_L[i];
+  if (tl.length === 1) rowTag(215, a + (b - a) * 0.5, tl[0]);
+  else { rowTag(215, a + (b - a) * 0.75, tl[0]); rowTag(215, a + (b - a) * 0.25, tl[1]); }
+});
+ROWS_R.forEach(([a, b], i) => {
+  hRow(556, a, b);
+  rowTag(651, a + (b - a) * 0.75, TAGS_R[i][0]); rowTag(651, a + (b - a) * 0.25, TAGS_R[i][1]);
+});
+// salão de festas
+box(548, 1470, 0, 84, 108, 24, { top: "linear-gradient(90deg,#8a5a3c 0 50%,#6e4630 50%)", n: "#7d6a58", s: "#9b8670", w: "#857160", e: "#6a5848" });
+// quadra de areia: tela nas laterais + teto com LED
+const MESH = "repeating-linear-gradient(90deg, rgba(210,215,225,.55) 0 1px, transparent 1px 6px), repeating-linear-gradient(0deg, rgba(210,215,225,.45) 0 1px, transparent 1px 6px)";
+const quadra = box(565, 1345, 0, 175, 85, 34, { top: `radial-gradient(circle, #ffe7a8 0 1.6px, rgba(255,231,168,.25) 2.4px, transparent 3.5px) 0 0/16px 16px, ${MESH}`, n: MESH, s: MESH, w: MESH, e: MESH });
+// playground
+box(662, 1490, 0, 4, 4, 22, { top: "#c0392b", s: "#c0392b", e: "#962d22" });
+box(700, 1490, 0, 4, 4, 22, { top: "#c0392b", s: "#c0392b", e: "#962d22" });
+box(662, 1490, 22, 42, 4, 3, { top: "#e74c3c", s: "#c0392b", e: "#962d22" });           // balanço
+box(668, 1540, 0, 34, 30, 16, { top: "#2e86de", s: "#1f6fb8", e: "#1a5a95", n: "#1f6fb8" }); // 5 em 1
+box(676, 1546, 16, 18, 18, 10, { top: "#f1c40f", s: "#d4ac0d", e: "#b7950b" });
+box(708, 1548, 0, 22, 8, 8, { top: "#f39c12", s: "#d68910", e: "#b9770e" });           // escorrega
+box(712, 1585, 0, 26, 4, 5, { top: "#27ae60", s: "#1e8449", e: "#196f3d" });           // gangorra
+// caixas d'água: 6 de 10 mil L + torre de 75 mil L
+[[160, 1545], [190, 1545], [160, 1575], [190, 1575], [160, 1605], [190, 1605]].forEach(([x, y]) =>
+  cyl(x, y, 0, 11, 20, "#3e74b3", "radial-gradient(#6a9ad0,#3e74b3)"));
+cyl(120, 1600, 0, 6, 95, "#9aa0aa", "#b5bbc4", 10);
+cyl(120, 1600, 95, 17, 30, "#b8bec7", "radial-gradient(#d6dbe2,#9aa0aa)", 14);
+// portaria: portão de veículos | portão de pedestres com facial | guarita
+box(450, 1470, 0, 56, 46, 26, { top: "#6c7686", n: "#56606f", s: `linear-gradient(0deg, ${GOLD} 0 4px, #6b7689 4px)`, w: "#5d6777", e: "#4b5463" });
+box(445, 1462, 26, 66, 58, 3, { top: "#3c4454", s: "#2f3644", e: "#2f3644", n: "#2f3644" });
+box(421, 1518, 0, 22, 2, 18, { top: "#8a93a3", s: MESH, n: MESH }); // portão pedestre
+const faceReader = box(444, 1521, 0, 3, 3, 16, { top: "#222", s: "#1c2230", e: "#1c2230" });
+const faceLight = cyl(445.5, 1523, 16, 3, 2, GOLD, GOLD, 8);
+const tagPole = box(322, 1526, 0, 4, 4, 18, { top: "#222", s: "#2a3140", e: "#1e2430" });
+const tagLight = cyl(324, 1528, 18, 4, 2, GOLD, GOLD, 8);
+// portão de veículos deslizante
+const GATE = "repeating-linear-gradient(90deg, #a6aebb 0 2px, transparent 2px 7px), linear-gradient(transparent 0 2px, transparent 2px)";
+const gate = div(world, "p3", {});
+face(gate, { width: "90px", height: "18px", transform: "rotateX(90deg)", background: GATE, borderTop: "2px solid #a6aebb", borderBottom: "2px solid #a6aebb" });
+// cerca (grade) em volta
+function fence(x1, y1, x2, y2) {
+  const len = Math.hypot(x2 - x1, y2 - y1), ang = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+  div(world, "f", { width: len + "px", height: "14px", transform: `translate3d(${x1}px,${y1}px,0) rotateZ(${ang}deg) rotateX(90deg)`,
+    background: "repeating-linear-gradient(90deg, rgba(190,198,210,.7) 0 1px, transparent 1px 5px)", borderBottom: "2px solid #9aa3b1" });
+}
+fence(70, 40, 800, 40); fence(800, 40, 800, 1620); fence(800, 1620, 510, 1620); fence(510, 1620, 510, 1520);
+fence(70, 40, 70, 1650); fence(70, 1650, 330, 1650); fence(330, 1650, 330, 1520);
+// núcleo de cada bloco (barra do H): entrada pela lateral, dentro do fosso — porta com facial no térreo + janela em cada lance de escada
+function sconce(x, y, z) {
+  div(world, "f", { width: "12px", height: "12px", borderRadius: "50%", background: "radial-gradient(#fffbe9 0 22%, rgba(255,214,140,.65) 35%, rgba(255,214,140,0) 70%)",
+    transform: `translate3d(${x - 6}px,${y}px,${z - 6}px) rotateX(90deg)` });
+}
+function panelY(x, y, z, wx, hz, bg) {
+  div(world, "f", { width: wx + "px", height: hz + "px", background: bg, transform: `translate3d(${x}px,${y}px,${z}px) rotateX(90deg)` });
+}
+const FLOOR = H / 5;
+for (const [x0, rows] of [[120, ROWS_L], [556, ROWS_R]])
+  for (const [a, b] of rows) {
+    const ys = b - a < 220 ? [a + (b - a) / 2] : [a + (b - a) * 0.25, a + (b - a) * 0.75];
+    for (const yc of ys) {
+      const xc = x0 + 87.5;
+      box(x0 + 64, yc - 14, 0, 47, 28, H - 2, { top: "linear-gradient(90deg,#8a909b,#767c87)", n: endWallD, s: endWall, w: endWall, e: endWallD });
+      for (const [fy, o] of [[yc - 14, -1], [yc + 14, 1]]) {
+        panelY(xc - 6, fy + o * 0.6, 0, 12, 13, "linear-gradient(90deg, #ffe3a3 0 1.2px, #3a2e1f 1.2px calc(100% - 1.2px), #ffe3a3 0)"); // porta
+        panelY(xc + 8, fy + o * 0.7, 6, 2.6, 3.6, GOLD);                                                                          // leitor facial
+        for (let f = 0; f < 5; f++) panelY(xc - 3.5, fy + o * 0.6, FLOOR * (f + 1) - 4, 7, 8, "#ffe3a3");                        // janela do lance
+        sconce(xc - 10, fy + o * 1, 15);
+        sv("ellipse", { cx: xc, cy: fy + o * 12, rx: 16, ry: 14, fill: "url(#pool)" }, ground);
+      }
+    }
+  }
+// lixeira coletiva (à direita das caixas d'água)
+box(236, 1598, 0, 70, 40, 16, { top: "#3d4a40", n: "#55665a", s: "repeating-linear-gradient(90deg,#55665a 0 3px,transparent 3px 7px)", w: "#4a594e", e: "#3f4d43" });
+box(232, 1594, 16, 78, 48, 2.5, { top: "#2f3a33", s: "#26302a", e: "#26302a", n: "#26302a" });
+[["#2e7d32", 242], ["#6b6b6b", 262], ["#1565c0", 282]].forEach(([c, x]) => box(x, 1608, 0, 16, 20, 12, { top: c, s: c, e: "#222", n: c }));
+// carros estacionados
+const CARC = ["#c9ccd3", "#8e1f2b", "#2c3e50", "#e8e8e8", "#7f8c8d", "#1c1c1c", "#b0b7c2", "#5d4037"];
+for (let y = 104; y < 1505; y += 14) {
+  if (y > 145 && rnd() < 0.55) box(425, y + 1.5, 0, 24, 11, 7, { top: CARC[(y / 14 | 0) % 8], s: "#222", e: "#1a1a1a", n: "#222" });
+  if (y > 145 && rnd() < 0.5) box(330, y + 1.5, 0, 24, 11, 7, { top: CARC[(y / 7 | 0) % 8], s: "#222", e: "#1a1a1a", n: "#222" });
+}
+for (let x = 430; x < 500; x += 13) if (rnd() < 0.7) box(x + 3, 1528, 0, 5, 18, 7, { top: "#1d1d1d", s: "#333", e: "#111" }); // motos
+for (let y = 1566; y < 1640; y += 18) if (rnd() < 0.6) box(450, y + 3, 0, 24, 11, 7, { top: CARC[(y / 9 | 0) % 8], s: "#222", e: "#1a1a1a" });
+// postes de luz na calçada
+for (let y = 180; y < 1480; y += 120) {
+  box(299, y, 0, 3, 3, 34, { top: "#333", s: "#444", e: "#333" });
+  div(world, "f", { width: "22px", height: "22px", borderRadius: "50%", background: "radial-gradient(#fff4cf, rgba(255,214,140,0) 70%)", transform: `translate3d(${290}px,${y - 9}px,35px)` });
+}
+// árvores
+function tree(x, y, r) {
+  box(x - 1.5, y - 1.5, 0, 3, 3, 14, { top: "#3b2a1a", s: "#4a3422", e: "#3b2a1a" });
+  div(world, "f", { width: 2 * r + "px", height: 2 * r + "px", borderRadius: "50%", transform: `translate3d(${x - r}px,${y - r}px,14px)`,
+    background: "radial-gradient(circle at 35% 35%, #4f8a5c, #2c5a3a 70%)" });
+}
+for (let y = 120; y < 1500; y += 95) { tree(92, y, 10); }
+for (let y = 300; y < 1200; y += 110) { tree(778, y, 11); }
+[[600, 160, 14], [700, 200, 16], [760, 1280, 18], [540, 1270, 12], [600, 1610, 10], [760, 1460, 14], [250, 1580, 12]].forEach(a => tree(...a));
+// carro que entra pela TAG
+const car = box(0, 0, 0, 11, 24, 8, { top: "linear-gradient(#e9ebef 0 25%, #2a3140 25% 45%, #e9ebef 45% 75%, #2a3140 75% 85%, #e9ebef 85%)", s: "#9aa0aa", e: "#7d838d", n: "#9aa0aa" });
+
+// etiquetas que olham para a câmera
+function label(x, y, z, text) { const d = div(world, "lbl", {}); d.textContent = text; d.pos = [x, y, z]; d.style.opacity = 0; return d; }
+const L = {
+  quadra: label(652, 1340, 40, "QUADRA DE AREIA"),
+  salao: label(590, 1470, 30, "SALÃO DE FESTAS"),
+  play: label(690, 1560, 26, "PLAYGROUND"),
+  agua: label(150, 1560, 130, "CAIXAS D'ÁGUA"),
+  lixo: label(271, 1600, 26, "LIXEIRA COLETIVA"),
+  tag: label(360, 1525, 26, "TAG VEICULAR"),
+  facial: label(445, 1525, 30, "FACIAL"),
+};
+
+/* =====================================================================
+   CENA 2 — PORTARIA DE FRENTE + MAIANE
+   ===================================================================== */
+const F = document.getElementById("front");
+const defs = sv("defs", {}, F);
+defs.innerHTML = `
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#080c18"/><stop offset="1" stop-color="#1d2640"/></linearGradient>
+  <radialGradient id="glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="${GOLD}" stop-opacity=".45"/><stop offset="1" stop-color="${GOLD}" stop-opacity="0"/></radialGradient>
+  <radialGradient id="phoneGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffe7a8" stop-opacity=".55"/><stop offset="1" stop-color="#ffe7a8" stop-opacity="0"/></radialGradient>
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#fff" stroke-opacity=".035"/></pattern>
+  <linearGradient id="blazer" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#f6efe2"/><stop offset=".6" stop-color="#ece3d2"/><stop offset="1" stop-color="#d9cdb6"/></linearGradient>
+  <linearGradient id="hair" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3d27f"/><stop offset="1" stop-color="#d9ac52"/></linearGradient>
+  <linearGradient id="pants" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1b2540"/><stop offset="1" stop-color="#121a2e"/></linearGradient>`;
+sv("rect", { width: 1080, height: 1920, fill: "url(#sky)" }, F);
+sv("rect", { width: 1080, height: 1920, fill: "url(#grid)" }, F);
+const FS = sv("g", {}, F);
+for (let i = 0; i < 40; i++) sv("circle", { cx: rnd() * 1080, cy: rnd() * 700, r: rnd() * 1.8 + 0.4, fill: "#fff", opacity: 0.25 + rnd() * 0.5 }, FS);
+// prédios ao fundo: blocos de 4 andares com telhado de duas águas
+function frontBlock(x, w, base, floors, tone) {
+  const fh = 64, h = floors * fh, top = base - h, ww = w * 0.38, gx = x + ww, gw = w - 2 * ww;
+  // núcleo recuado (barra do H) dentro do fosso: porta com facial + janela por lance
+  sv("rect", { x: gx, y: top + 10, width: gw, height: h - 10, fill: "#151b2b" }, FS);
+  const cx = gx + gw / 2;
+  sv("rect", { x: cx - 30, y: top + 30, width: 60, height: h - 30, fill: tone.core }, FS);
+  sv("rect", { x: cx - 30, y: base - 44, width: 60, height: 44, fill: tone.band, opacity: 0.8 }, FS);
+  for (let f = 0; f < floors; f++) sv("rect", { x: cx - 11, y: top + 40 + f * fh, width: 22, height: 30, rx: 2, fill: "#ffe3a3", opacity: 0.85 }, FS);
+  sv("rect", { x: cx - 16, y: base - 52, width: 32, height: 52, fill: "#3a2e1f", stroke: "#ffe3a3", "stroke-width": 2 }, FS);
+  sv("rect", { x: cx + 20, y: base - 40, width: 7, height: 10, rx: 2, fill: GOLD }, FS);
+  sv("ellipse", { cx, cy: base - 64, rx: 34, ry: 26, fill: "url(#glow)" }, FS);
+  sv("rect", { x: cx - 4, y: base - 70, width: 8, height: 10, rx: 3, fill: "#fff3c4" }, FS);
+  // as duas alas com telhado de duas águas
+  for (const wx0 of [x, x + w - ww]) {
+    sv("polygon", { points: `${wx0 - 6},${top} ${wx0 + ww + 6},${top} ${wx0 + ww / 2},${top - 46}`, fill: tone.roof }, FS);
+    sv("rect", { x: wx0, y: top, width: ww, height: h, fill: tone.wall }, FS);            // ponta da ala: sem janelas
+    sv("rect", { x: wx0, y: base - 44, width: ww, height: 44, fill: tone.band }, FS);    // faixa cinza ~2 m
+  }
+}
+frontBlock(-40, 520, 1260, 5, { wall: "#a99d86", roof: "#3a3f4a", band: "#8b8e94", core: "#8f846f" });
+frontBlock(560, 560, 1260, 5, { wall: "#a99d86", roof: "#3a3f4a", band: "#8b8e94", core: "#8f846f" });
+frontBlock(120, 360, 1300, 5, { wall: "#c4b79c", roof: "#454b57", band: "#a3a6ac", core: "#a3977f" });
+frontBlock(640, 380, 1300, 5, { wall: "#c4b79c", roof: "#454b57", band: "#a3a6ac", core: "#a3977f" });
+// grade + chão
+sv("rect", { x: 0, y: 1300, width: 1080, height: 300, fill: "#1a2132" }, FS);
+// torre d'água (75 mil L) e caixas de 10 mil L atrás da grade, no canto esquerdo
+sv("rect", { x: 44, y: 980, width: 34, height: 600, fill: "#8d939d" }, FS);
+sv("rect", { x: 66, y: 980, width: 12, height: 600, fill: "#737983" }, FS);
+sv("rect", { x: 6, y: 860, width: 110, height: 140, rx: 14, fill: "#a7adb7" }, FS);
+sv("rect", { x: 80, y: 860, width: 36, height: 140, rx: 10, fill: "#8d939d" }, FS);
+sv("ellipse", { cx: 61, cy: 860, rx: 55, ry: 14, fill: "#c3c8d0" }, FS);
+const beacon = sv("circle", { cx: 61, cy: 842, r: 6, fill: "#ff5a4f" }, FS);
+for (const x of [96, 166]) {
+  sv("rect", { x, y: 1350, width: 62, height: 130, rx: 10, fill: "#3e74b3" }, FS);
+  sv("rect", { x: x + 40, y: 1350, width: 22, height: 130, rx: 8, fill: "#2f5d92" }, FS);
+  sv("ellipse", { cx: x + 31, cy: 1350, rx: 31, ry: 8, fill: "#6a9ad0" }, FS);
+  for (let y = 1375; y < 1475; y += 22) sv("rect", { x, y, width: 62, height: 3, fill: "#2f5d92" }, FS);
+}
+for (let x = 0; x < 1080; x += 18) sv("rect", { x, y: 1330, width: 4, height: 250, fill: "#59627a" }, FS);
+sv("rect", { x: 0, y: 1330, width: 1080, height: 8, fill: "#6c7690" }, FS);
+sv("rect", { x: 0, y: 1580, width: 1080, height: 70, fill: "#3a4256" }, FS);
+sv("rect", { x: 0, y: 1650, width: 1080, height: 270, fill: "#161b26" }, FS);
+// lixeira coletiva (à direita das caixas d'água, acesso pelo lado de fora)
+sv("rect", { x: 20, y: 1500, width: 230, height: 150, fill: "#3f4d43" }, FS);
+sv("rect", { x: 8, y: 1482, width: 254, height: 24, rx: 4, fill: "#26302a" }, FS);
+for (let x = 30; x < 245; x += 14) sv("rect", { x, y: 1512, width: 5, height: 132, fill: "#6d7f71" }, FS);
+[["#2e7d32", 40], ["#6b6b6b", 108], ["#1565c0", 176]].forEach(([c, x]) => {
+  sv("rect", { x, y: 1560, width: 56, height: 84, rx: 6, fill: c, opacity: 0.9 }, FS);
+});
+sv("rect", { x: 70, y: 1458, width: 130, height: 24, rx: 4, fill: "#11151f", stroke: GOLD, "stroke-width": 2 }, FS);
+sv("text", { x: 135, y: 1476, "text-anchor": "middle", "font-size": 15, "font-weight": 800, fill: GOLD, "letter-spacing": 2 }, FS, "LIXEIRA");
+sv("circle", { cx: 30, cy: 1494, r: 5, fill: "#fff3c4" }, FS); sv("ellipse", { cx: 30, cy: 1530, rx: 30, ry: 40, fill: "url(#glow)" }, FS);
+// portão de veículos (deslizante)
+sv("rect", { x: 266, y: 1380, width: 16, height: 200, fill: "#8a93a3" }, FS);
+sv("rect", { x: 456, y: 1380, width: 16, height: 200, fill: "#8a93a3" }, FS);
+const fGate = sv("g", {}, FS);
+sv("rect", { x: 282, y: 1400, width: 174, height: 12, fill: "#9aa3b3" }, fGate);
+sv("rect", { x: 282, y: 1556, width: 174, height: 12, fill: "#9aa3b3" }, fGate);
+for (let x = 288; x < 456; x += 22) sv("rect", { x, y: 1400, width: 8, height: 168, fill: "#9aa3b3" }, fGate);
+// leitor de TAG (no pilar esquerdo do portão de veículos)
+sv("rect", { x: 254, y: 1356, width: 30, height: 40, rx: 6, fill: "#11151f", stroke: "#56606f", "stroke-width": 3 }, FS);
+const fTag = sv("circle", { cx: 269, cy: 1376, r: 7, fill: GOLD }, FS);
+// guarita
+sv("rect", { x: 670, y: 1260, width: 300, height: 320, fill: "#4f5a6c" }, FS);
+sv("rect", { x: 650, y: 1236, width: 340, height: 30, rx: 4, fill: "#2f3644" }, FS);
+sv("rect", { x: 700, y: 1300, width: 240, height: 130, rx: 6, fill: "#141a27", stroke: "#8a93a3", "stroke-width": 6 }, FS);
+sv("rect", { x: 708, y: 1308, width: 224, height: 114, rx: 4, fill: GOLD, opacity: 0.18 }, FS);
+sv("rect", { x: 670, y: 1462, width: 300, height: 14, fill: GOLD, opacity: 0.9 }, FS);
+for (const ax of [685, 955]) { sv("ellipse", { cx: ax, cy: 1330, rx: 34, ry: 70, fill: "url(#glow)" }, FS); sv("rect", { x: ax - 5, y: 1296, width: 10, height: 18, rx: 3, fill: "#fff3c4" }, FS); }
+sv("text", { x: 820, y: 1525, "text-anchor": "middle", "font-size": 30, "font-weight": 900, fill: "#e9edf3", "letter-spacing": 5 }, FS, "PORTARIA");
+// portão de pedestres + leitor facial (à esquerda da guarita, ao lado do portão de veículos)
+sv("rect", { x: 486, y: 1380, width: 128, height: 200, fill: "none", stroke: "#8a93a3", "stroke-width": 8 }, FS);
+for (let x = 498; x < 612; x += 20) sv("rect", { x, y: 1384, width: 6, height: 192, fill: "#8a93a3" }, FS);
+sv("rect", { x: 630, y: 1360, width: 12, height: 220, fill: "#2a3140" }, FS);
+sv("rect", { x: 616, y: 1310, width: 40, height: 64, rx: 7, fill: "#11151f", stroke: "#56606f", "stroke-width": 3 }, FS);
+const fFace = sv("g", {}, FS);
+sv("rect", { x: 622, y: 1318, width: 28, height: 40, rx: 4, fill: GOLD, opacity: 0.85 }, fFace);
+sv("circle", { cx: 636, cy: 1333, r: 7, fill: "none", stroke: "#11151f", "stroke-width": 2.5 }, fFace);
+sv("path", { d: "M 626 1352 Q 636 1340 646 1352", fill: "none", stroke: "#11151f", "stroke-width": 2.5 }, fFace);
+// motos estacionadas em frente à guarita (lado de fora)
+function moto(x, y) {
+  sv("circle", { cx: x, cy: y, r: 22, fill: "none", stroke: "#0b0e15", "stroke-width": 9 }, FS);
+  sv("circle", { cx: x + 86, cy: y, r: 22, fill: "none", stroke: "#0b0e15", "stroke-width": 9 }, FS);
+  sv("path", { d: `M ${x} ${y} L ${x + 30} ${y - 34} L ${x + 70} ${y - 34} L ${x + 86} ${y} M ${x + 64} ${y - 34} L ${x + 74} ${y - 58}`, fill: "none", stroke: "#2b3346", "stroke-width": 10, "stroke-linecap": "round" }, FS);
+  sv("rect", { x: x + 22, y: y - 50, width: 40, height: 14, rx: 7, fill: "#0b0e15" }, FS);
+}
+moto(720, 1630); moto(850, 1630);
+sv("ellipse", { cx: 330, cy: 1790, rx: 300, ry: 70, fill: "url(#glow)" }, FS);
+
+// ---------- MAIANE ----------
+const SKIN = "#f2c9a8", SKIN_SH = "#e3b08c", HAIR = "url(#hair)", HAIR_L = "#f9e2a6", HAIR_D = "#c99a44",
+      BLOUSE = "#f6f2ea", LIPS = "#c8646d", SHOE = "#0c0f17";
+const M = sv("g", {}, FS);           // posição
+const MB = sv("g", {}, M);           // balanço do corpo
+// cabelo de trás
+sv("path", { d: "M -72 -900 Q -96 -790 -90 -700 Q -92 -640 -58 -628 Q -30 -640 -22 -700 L 22 -700 Q 30 -640 58 -628 Q 92 -640 90 -700 Q 96 -790 72 -900 Z", fill: HAIR_D }, MB);
+// pernas (aparecem abaixo da saia midi) + scarpin
+function leg(side) {
+  const g = sv("g", {}, MB), s = side;
+  sv("path", { d: `M ${s * 12} -320 L ${s * 58} -320 Q ${s * 60} -200 ${s * 46} -60 L ${s * 26} -60 Q ${s * 18} -200 ${s * 12} -320 Z`, fill: SKIN }, g);
+  sv("path", { d: `M ${s * 50} -250 Q ${s * 52} -160 ${s * 44} -70`, fill: "none", stroke: SKIN_SH, "stroke-width": 4, opacity: 0.6 }, g);
+  sv("path", { d: `M ${s * 22} -64 L ${s * 50} -64 Q ${s * 62} -30 ${s * 60} -6 L ${s * 16} -6 Q ${s * 12} -36 ${s * 22} -64 Z`, fill: "#111216" }, g);
+  sv("path", { d: `M ${s * 24} -60 Q ${s * 36} -48 ${s * 48} -60`, fill: "none", stroke: SKIN, "stroke-width": 5 }, g);
+  sv("rect", { x: s > 0 ? 50 : -56, y: -14, width: 6, height: 14, fill: "#111216" }, g);
+  return g;
+}
+const legL = leg(-1), legR = leg(1);
+// saia lápis midi
+const skirt = sv("path", { d: "M -92 -500 L 92 -500 Q 90 -390 78 -268 L -78 -268 Q -90 -390 -92 -500 Z", fill: "#131419" }, MB);
+sv("path", { d: "M 30 -480 Q 34 -380 30 -272", fill: "none", stroke: "#2a2c35", "stroke-width": 3 }, MB);
+// braço esquerdo (balança)
+const armL = sv("g", {}, MB);
+sv("path", { d: "M -106 -738 Q -132 -640 -128 -560 L -124 -440", fill: "none", stroke: "#cfc2aa", "stroke-width": 50, "stroke-linecap": "round" }, armL);
+sv("path", { d: "M -106 -738 Q -132 -640 -128 -560 L -124 -440", fill: "none", stroke: "#efe7d8", "stroke-width": 43, "stroke-linecap": "round" }, armL);
+sv("ellipse", { cx: -124, cy: -414, rx: 17, ry: 23, fill: SKIN }, armL);
+sv("path", { d: "M -140 -434 L -108 -434", stroke: GOLD, "stroke-width": 5, "stroke-linecap": "round" }, armL);
+// blazer marfim acinturado
+sv("path", { d: "M -108 -750 Q -56 -770 0 -768 Q 56 -770 108 -750 Q 120 -700 112 -642 Q 94 -596 76 -566 Q 96 -526 106 -476 L -106 -476 Q -96 -526 -76 -566 Q -94 -596 -112 -642 Q -120 -700 -108 -750 Z", fill: "url(#blazer)", stroke: "#cfc2aa", "stroke-width": 3 }, MB);
+sv("path", { d: "M -34 -764 L 0 -612 L 34 -764 Z", fill: "#15161b" }, MB);                 // blusa de seda preta
+sv("path", { d: "M -30 -764 L 0 -704 L 30 -764 Z", fill: SKIN }, MB);                      // decote
+sv("path", { d: "M -22 -768 Q 0 -722 22 -768", fill: "none", stroke: GOLD, "stroke-width": 2.5 }, MB); // colar
+sv("circle", { cx: 0, cy: -730, r: 4.5, fill: GOLD }, MB);
+sv("path", { d: "M -48 -766 L 0 -610 L -8 -586 L -38 -636 L -78 -720 Z", fill: "#ddd1bb" }, MB); // lapelas
+sv("path", { d: "M 48 -766 L 0 -610 L 8 -586 L 38 -636 L 78 -720 Z", fill: "#ddd1bb" }, MB);
+sv("rect", { x: -78, y: -574, width: 156, height: 14, rx: 3, fill: "#15161b" }, MB);       // cinto
+sv("rect", { x: -13, y: -577, width: 26, height: 20, rx: 4, fill: "none", stroke: GOLD, "stroke-width": 4 }, MB);
+sv("path", { d: "M -88 -506 L -54 -506", stroke: "#cfc2aa", "stroke-width": 3, "stroke-linecap": "round" }, MB);
+// pescoço + cabeça (rosto fino, maçãs altas, olhos amendoados)
+sv("path", { d: "M -16 -814 L 16 -814 L 19 -756 L -19 -756 Z", fill: SKIN_SH }, MB);
+sv("ellipse", { cx: 0, cy: -772, rx: 17, ry: 6, fill: "#d29d7a", opacity: 0.6 }, MB);
+const head = sv("g", {}, MB);
+sv("ellipse", { cx: -53, cy: -874, rx: 7, ry: 13, fill: SKIN_SH }, head);
+sv("ellipse", { cx: 53, cy: -874, rx: 7, ry: 13, fill: SKIN_SH }, head);
+sv("path", { d: "M -54 -896 Q -56 -846 -42 -812 Q -22 -778 0 -774 Q 22 -778 42 -812 Q 56 -846 54 -896 Q 52 -966 0 -968 Q -52 -966 -54 -896 Z", fill: SKIN }, head);
+for (const sd of [-1, 1]) {                       // brincos de gota
+  sv("path", { d: `M ${sd * 55} -858 L ${sd * 55} -836`, stroke: GOLD, "stroke-width": 2.5 }, head);
+  sv("path", { d: `M ${sd * 55} -836 Q ${sd * 61} -826 ${sd * 55} -820 Q ${sd * 49} -826 ${sd * 55} -836 Z`, fill: GOLD }, head);
+}
+const eyes = sv("g", {}, head); // rosto sem traços (estilo minimalista)
+// cabelo da frente (franja lateral + mechas sobre os ombros)
+sv("path", { d: "M -58 -884 Q -66 -974 2 -978 Q 66 -976 60 -880 Q 54 -934 20 -946 Q -8 -930 -34 -904 Q -48 -892 -58 -884 Z", fill: HAIR }, head);
+sv("path", { d: "M -58 -892 Q -78 -800 -74 -720 Q -70 -668 -54 -646 Q -50 -700 -48 -780 Q -46 -850 -48 -894 Z", fill: HAIR }, head);
+sv("path", { d: "M 58 -892 Q 78 -800 74 -720 Q 70 -668 54 -646 Q 50 -700 48 -780 Q 46 -850 48 -894 Z", fill: HAIR }, head);
+sv("path", { d: "M -36 -954 Q 0 -974 40 -950 M -52 -880 Q -64 -800 -60 -700 M 54 -880 Q 66 -800 62 -700", fill: "none", stroke: HAIR_L, "stroke-width": 4, "stroke-linecap": "round", opacity: 0.8 }, head);
+// braço direito com iPhone (antebraço gira no cotovelo)
+const armR = sv("g", {}, MB);
+sv("path", { d: "M 106 -738 Q 134 -650 132 -575", fill: "none", stroke: "#cfc2aa", "stroke-width": 50, "stroke-linecap": "round" }, armR);
+sv("path", { d: "M 106 -738 Q 134 -650 132 -575", fill: "none", stroke: "#efe7d8", "stroke-width": 43, "stroke-linecap": "round" }, armR);
+const fore = sv("g", {}, armR);
+sv("path", { d: "M 136 -575 L 132 -436", fill: "none", stroke: "#cfc2aa", "stroke-width": 46, "stroke-linecap": "round" }, fore);
+sv("path", { d: "M 136 -575 L 132 -436", fill: "none", stroke: "#e8dfcd", "stroke-width": 39, "stroke-linecap": "round" }, fore);
+const phone = sv("g", {}, fore);
+sv("ellipse", { cx: 132, cy: -470, rx: 90, ry: 110, fill: "url(#phoneGlow)", class: "pglow" }, phone);
+sv("rect", { x: 108, y: -520, width: 50, height: 100, rx: 10, fill: "#0b0d12", stroke: "#3a3f4a", "stroke-width": 3 }, phone);
+sv("rect", { x: 112, y: -515, width: 42, height: 90, rx: 7, fill: "#151a26" }, phone);
+sv("rect", { x: 126, y: -511, width: 14, height: 4, rx: 2, fill: "#000" }, phone);
+const screen = sv("g", { opacity: 0 }, phone);
+sv("rect", { x: 112, y: -515, width: 42, height: 90, rx: 7, fill: "#1b2133" }, screen);
+for (let i = 0; i < 4; i++) {
+  sv("rect", { x: 117, y: -500 + i * 18, width: 8, height: 8, rx: 2, fill: GOLD }, screen);
+  sv("rect", { x: 129, y: -499 + i * 18, width: 20, height: 5, rx: 2, fill: "#e9edf3", opacity: 0.55 }, screen);
+}
+sv("ellipse", { cx: 133, cy: -418, rx: 20, ry: 24, fill: SKIN }, fore); // mão segurando
+sv("path", { d: "M 118 -428 Q 108 -440 114 -452", fill: "none", stroke: SKIN_SH, "stroke-width": 4, "stroke-linecap": "round" }, fore);
+
+/* ---------- textos ---------- */
+const OV = document.getElementById("overlay");
+function caption(lines, y, size) {
+  const g = sv("g", { opacity: 0 }, OV);
+  lines.forEach((l, i) => sv("text", { x: 540, y: y + i * size * 1.08, "text-anchor": "middle", "font-size": size, "font-weight": 900,
+    fill: i === lines.length - 1 ? GOLD : "#f4f1ea", stroke: "#0d1118", "stroke-width": 12, "paint-order": "stroke", "letter-spacing": 2 }, g, l));
+  return g;
+}
+const cap1 = caption(["15 BLOCOS", "1 RUA CENTRAL"], 250, 96);
+const cap2 = caption(["GESTÃO", "PRESENTE"], 300, 124);
+const badge = sv("g", { opacity: 0 }, OV);
+sv("rect", { x: 320, y: 1790, width: 440, height: 66, rx: 33, fill: "#0d1118", stroke: GOLD, "stroke-width": 3 }, badge);
+sv("text", { x: 540, y: 1834, "text-anchor": "middle", "font-size": 34, "font-weight": 800, fill: GOLD }, badge, "@maiane.sindica");
+const flash = sv("rect", { width: 1080, height: 1920, fill: "#fff6e0", opacity: 0 }, OV);
+
+/* =====================================================================
+   LINHA DO TEMPO (determinística: render(t) desenha o quadro t)
+   ===================================================================== */
+const DURATION = 13;
+window.DURATION = DURATION;
+window.render = function (t) {
+  // ---- câmera de drone ----
+  const k = ease(prog(t, 1.2, 5.4));
+  const tilt = lerp(0, 58, k), s = lerp(1.08, 2.45, k), rz = lerp(0, -10, k);
+  const k1 = ease(prog(t, 1.2, 3.6)), k2 = ease(prog(t, 3.6, 5.4));
+  const cx = lerp(lerp(440, 255, k1), 478, k2), cy = lerp(880, 1500, k1), oy = lerp(960, 1230, k);
+  document.getElementById("cam").style.perspective = lerp(4200, 1500, k) + "px";
+  world.style.transform = `translate(540px, ${oy}px) rotateX(${tilt}deg) rotateZ(${rz}deg) scale3d(${s},${s},${s}) translate(${-cx}px, ${-cy}px)`;
+  for (const d of Object.values(L)) {
+    const [x, y, z] = d.pos;
+    d.style.transform = `translate3d(${x}px,${y}px,${z}px) rotateZ(${-rz}deg) rotateX(${-tilt}deg) scale(${1 / s}) translate(-50%,-100%)`;
+  }
+  const on = (a) => ease(prog(t, a, a + 0.4));
+  L.agua.style.opacity = on(2.6) * (1 - on(4.3));
+  L.lixo.style.opacity = on(3.0) * (1 - on(4.3));
+  L.quadra.style.opacity = on(4.1);
+  L.salao.style.opacity = on(4.4);
+  L.play.style.opacity = on(4.7);
+  L.tag.style.opacity = on(4.8);
+  L.facial.style.opacity = on(5.6);
+  cap1.setAttribute("opacity", Math.min(on(0.3), 1 - ease(prog(t, 1.9, 2.4))));
+  // ---- carro entra pela TAG ----
+  const cy1 = t < 4.9 ? lerp(1700, 1540, ease(prog(t, 2.6, 4.9))) : lerp(1540, 1300, ease(prog(t, 5.6, 6.8)));
+  car.style.transform = `translate3d(${380}px,${cy1}px,0)`;
+  const g = ease(prog(t, 5.0, 5.6));
+  gate.style.transform = `translate3d(${330 - 88 * g}px,${1520}px,0)`;
+  const blink = (a) => (t > a && t < a + 0.7 ? 0.35 + 0.65 * Math.abs(Math.sin((t - a) * 14)) : 1);
+  tagLight.style.filter = `brightness(${t > 4.9 && t < 5.6 ? 1.8 : 0.7}) opacity(${blink(4.9)})`;
+  faceLight.style.filter = `brightness(${t > 5.7 && t < 6.4 ? 1.8 : 0.7}) opacity(${blink(5.7)})`;
+  // ---- transição ----
+  const fl = t < 6.85 ? ease(prog(t, 6.6, 6.85)) : 1 - ease(prog(t, 6.85, 7.3));
+  flash.setAttribute("opacity", fl * 0.9);
+  const front = t >= 6.85;
+  document.getElementById("cam").style.visibility = front ? "hidden" : "visible";
+  document.getElementById("front").style.opacity = front ? 1 : 0;
+  // ---- cena de frente ----
+  const fz = lerp(1.06, 1, ease(prog(t, 6.85, 10)));
+  FS.setAttribute("transform", `translate(540 1700) scale(${fz}) translate(-540 -1700)`);
+  fTag.setAttribute("opacity", 0.55 + 0.45 * Math.abs(Math.sin(t * 3)));
+  fFace.setAttribute("opacity", 0.6 + 0.4 * Math.abs(Math.sin(t * 2.2)));
+  beacon.setAttribute("opacity", Math.sin(t * 5) > 0 ? 1 : 0.25);
+  // Maiane caminha da esquerda e para
+  const walkK = ease(prog(t, 7.2, 9.6));
+  const walking = t > 7.2 && t < 9.7 ? Math.min(1, prog(t, 7.2, 7.5), 1 - prog(t, 9.3, 9.7)) : 0;
+  const ph = (t - 7.2) * Math.PI * 3.6;
+  const mx = lerp(-260, 330, walkK);
+  const bob = -Math.abs(Math.sin(ph)) * 10 * walking + Math.sin(t * 2.2) * 2 * (1 - walking);
+  M.setAttribute("transform", `translate(${mx} ${1790 + bob}) scale(0.92)`);
+  MB.setAttribute("transform", `rotate(${Math.sin(ph) * 1.6 * walking} 0 -450)`);
+  legL.setAttribute("transform", `translate(0 ${-Math.max(0, Math.sin(ph)) * 34 * walking})`);
+  legR.setAttribute("transform", `translate(0 ${-Math.max(0, -Math.sin(ph)) * 34 * walking})`);
+  armL.setAttribute("transform", `rotate(${-Math.sin(ph) * 8 * walking} -106 -738)`);
+  // levanta o iPhone e mostra a tela
+  const up = ease(prog(t, 9.9, 10.6));
+  armR.setAttribute("transform", `rotate(${Math.sin(ph) * 6 * walking - 8 * up} 112 -738)`);
+  const a = 128 * up;
+  fore.setAttribute("transform", `rotate(${a} 136 -575)`);
+  phone.setAttribute("transform", `rotate(${-a} 133 -470)`);
+  screen.setAttribute("opacity", ease(prog(t, 10.4, 10.8)));
+  phone.querySelector(".pglow").setAttribute("opacity", ease(prog(t, 10.4, 10.8)));
+  const bl = [8.4, 11.6].some((b) => Math.abs(t - b) < 0.07) ? 0.1 : 1;
+  eyes.setAttribute("transform", `translate(0 -879) scale(1 ${bl}) translate(0 879)`);
+  head.setAttribute("transform", `rotate(${Math.sin(t * 1.7) * 1.5} 0 -800)`);
+  cap2.setAttribute("opacity", ease(prog(t, 10.8, 11.3)));
+  badge.setAttribute("opacity", ease(prog(t, 11.4, 11.9)));
+};
+window.render(0);
+</script>
+</body>
+</html>
