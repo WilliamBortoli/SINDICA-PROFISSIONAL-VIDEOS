@@ -2,7 +2,7 @@
 A trilha fica baixa (~0,13) porque a narração contínua da Maiane entra por cima (mixar.py)."""
 import numpy as np, wave
 
-SR, DUR = 48000, 61.0
+SR, DUR = 48000, 62.5
 N = int(SR * DUR)
 L = np.zeros(N); R = np.zeros(N)
 rng = np.random.default_rng(5)

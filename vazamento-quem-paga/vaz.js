@@ -4,7 +4,7 @@
    Narração contínua entra aos 2 s (mixar.py). Sem legenda no rodapé.
    Reaproveita os auxiliares de ../boa-convivencia/conv.js (palco D, person, title, chip, check, stage, wipe, Maiane). */
 
-window.DURATION = 61;
+window.DURATION = 62.5;
 const BLUE = "#3d8bfd", WATER = "#4aa3ff", RED = "#ff3b4e";
 const KF = (t, keys) => {
   if (t <= keys[0][0]) return keys[0].slice(1);
@@ -543,7 +543,7 @@ window.render = function (t) {
   const cdOn = t >= 52.6 && t < 55;
   cd.setAttribute("opacity", cdOn ? 1 : 0);
   if (cdOn) { cdNum.textContent = String(3 - Math.floor((t - 52.6) / 0.8)); cdRing.setAttribute("stroke-dashoffset", 2 * Math.PI * 130 * (((t - 52.6) % 0.8) / 0.8)); }
-  showTitle(T.sindica, t, 56.2, 58.6); showTitle(T.salva, t, 58.7, 61);
+  showTitle(T.sindica, t, 56.2, 58.6); showTitle(T.salva, t, 58.7, 62.5);
   logo2.setAttribute("opacity", ease(prog(t, 58.9, 59.3)));
   seal.setAttribute("opacity", 1 - ease(prog(t, 58.7, 59.0)));
   let wx = -2000;
