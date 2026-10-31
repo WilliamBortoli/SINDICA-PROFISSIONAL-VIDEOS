@@ -75,7 +75,7 @@ d = 3.5; add(18, norm(band(rng.standard_normal(int(d * SR)), 60, 400)) * np.inte
 add(31, bell(523.3, 1.4), 0.12); add(35.2, bell(659.3, 1.4), 0.12)
 for t0 in np.arange(41.5, 45.5, 0.5): add(t0, np.sin(2 * np.pi * 880 * tt(.08)) * dec(.08, 30), 0.05)
 for t0 in (50.6, 51.4, 52.2): add(t0, norm(band(rng.standard_normal(int(.05 * SR)), 900, 2500)) * dec(.05, 90), 0.25)
-add(53.0, bell(880, 1.4) + 0.5 * bell(1318.5, 1.2), 0.14)
+add(53.0, bell(880, 1.4) + 0.5 * bell(1318.5, 1.4), 0.14)
 add(56.6, bell(523.3, 2) + bell(659.3, 2) + bell(784, 2), 0.08)
 
 fade = np.ones(N); fn = int(1.5 * SR); fade[-fn:] = np.linspace(1, 0, fn)
