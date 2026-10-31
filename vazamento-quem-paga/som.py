@@ -2,7 +2,7 @@
 A trilha fica baixa (~0,13) porque a narração contínua da Maiane entra por cima (mixar.py)."""
 import numpy as np, wave
 
-SR, DUR = 48000, 58.5
+SR, DUR = 48000, 61.0
 N = int(SR * DUR)
 L = np.zeros(N); R = np.zeros(N)
 rng = np.random.default_rng(5)
@@ -40,43 +40,63 @@ PROG = {"leve": ([261.6, 329.6, 392.0], [196.0, 246.9, 293.7], [220.0, 261.6, 32
         "tenso": ([220.0, 261.6, 329.6], [174.6, 220.0, 261.6], [164.8, 207.7, 246.9], [220.0, 261.6, 329.6])}
 t, bar = 0.0, 0
 while t < DUR - 0.5:
-    mode = "tenso" if 13 <= t < 29 else "leve"
+    mode = "tenso" if 15 <= t < 31 else "leve"
     ch = PROG[mode][bar % 4]
     for i, k in enumerate([0, 1, 2, 1, 0, 1, 2, 1]):
         add(t + i * BEAT / 2, pluck(ch[k] * (2 if i % 4 == 2 else 1)), 0.13, -0.2 + 0.4 * (i % 2))
     add(t, np.sin(2 * np.pi * ch[0] / 2 * tt(BEAT * 4)) * dec(BEAT * 4, 1.2), 0.12)
     t += BEAT * 4; bar += 1
 
-# ---------- efeitos ----------
+# ---------- efeitos (linha do tempo v2) ----------
 def whoosh(d=0.6):
     n = int(d * SR); return norm(band(rng.standard_normal(n), 400, 4000) * np.sin(np.linspace(0, np.pi, n)) ** 2)
 def plink(): t = tt(.25); return np.sin(2 * np.pi * np.cumsum(np.linspace(1400, 700, len(t))) / SR) * dec(.25, 18)
 def zap():
     n = int(.5 * SR); s = band(rng.standard_normal(n), 1500, 9000) * (np.sign(np.sin(2 * np.pi * 37 * tt(.5))) * .5 + .5) * dec(.5, 6)
     return norm(s + 0.6 * np.sin(2 * np.pi * 60 * tt(.5)) * dec(.5, 5))
-def tvhum(d): return norm(band(rng.standard_normal(int(d * SR)), 2000, 9000)) * 0.4 + np.sin(2 * np.pi * 15600 * tt(d)) * 0.2
-for c in (5, 18, 29.6, 54): add(c - 0.3, whoosh(), 0.14)
-# gancho e dano: TV ligada, gotas, estalo
-add(0, tvhum(2.8), 0.02); add(5, tvhum(20), 0.012)
-for t0 in (0.9, 1.8, 2.6): add(t0, plink(), 0.12, 0.2)
-add(2.8, zap(), 0.32); add(25.0, zap(), 0.32)
-for t0 in np.arange(21.8, 28.6, 0.9): add(t0 + 0.7, plink(), 0.1, 0.2)
-# instalação: chave de boca, água correndo
-for t0 in np.arange(6.1, 9.3, 0.35): add(t0, norm(band(rng.standard_normal(int(.05 * SR)), 2500, 8000)) * dec(.05, 80), 0.08, -0.2)
-d = 3.0; add(9.6, norm(band(rng.standard_normal(int(d * SR)), 600, 5000)) * np.interp(tt(d), [0, .2, 2.7, 3], [0, 1, 1, 0]), 0.06)
-add(11.2, bell(1046.5, 0.6), 0.08)
-# o pingo (com eco), relógio dos dias
-for t0 in np.arange(14.2, 18, 0.8):
-    p = plink(); add(t0 + 0.4, p, 0.16, 0.3); add(t0 + 0.55, p, 0.05, -0.3)
-for t0 in np.arange(14.8, 17.6, 0.2): add(t0, np.sin(2 * np.pi * 2200 * tt(.02)) * dec(.02, 200), 0.04)
+def tvsound(d):  # novela abafada: cordas + vozes indistintas
+    t = tt(d); v = band(rng.standard_normal(len(t)), 300, 2500) * (0.5 + 0.5 * np.sin(2 * np.pi * 3.7 * t + 2 * np.sin(t)))
+    return norm(v * 0.5 + np.sin(2 * np.pi * 330 * t) * 0.2 + np.sin(2 * np.pi * 415 * t) * 0.15)
+def meow(): t = tt(.45); f = 700 + 300 * np.sin(np.linspace(0, np.pi, len(t))); return np.sin(2 * np.pi * np.cumsum(f) / SR) * np.sin(np.linspace(0, np.pi, len(t))) * (0.6 + 0.4 * np.sin(2 * np.pi * 6 * t))
+# drone: zumbido subindo e whoosh na janela
+d = 3.2; t = tt(d); drn = np.sin(2 * np.pi * np.cumsum(180 + 60 * t / d + 4 * np.sin(2 * np.pi * 30 * t)) / SR) + 0.4 * band(rng.standard_normal(len(t)), 800, 4000)
+add(0, norm(drn) * np.interp(t, [0, .5, 2.6, 3.2], [0, 1, 1, 0]), 0.08)
+add(2.7, whoosh(0.7), 0.22)
+# sala: novela, gotas, estalo, gato
+add(3.0, tvsound(2.0), 0.05); add(24.0, tvsound(3.6), 0.05)
+for t0 in np.arange(3.6, 5.0, 0.85): add(t0 + 0.3, plink(), 0.12, 0.2)
+for t0 in np.arange(26.2, 29, 0.85): add(t0 + 0.3, plink(), 0.12, 0.2)
+add(5.0, zap(), 0.34); add(27.6, zap(), 0.34)
+add(5.1, meow(), 0.06, -0.5); add(27.7, meow(), 0.06, -0.5)
+# subida pela laje
+add(7.0, whoosh(1.0), 0.18)
+# cozinha: passos, caixa, torneira velha, chave (clic), água, joinha
+for t0 in np.arange(7.8, 8.9, 0.38): add(t0, norm(band(rng.standard_normal(int(.07 * SR)), 150, 1200)) * dec(.07, 60), 0.1, -0.3)
+add(9.4, np.sin(2 * np.pi * 120 * tt(.15)) * dec(.15, 30), 0.15)
+add(10.4, norm(band(rng.standard_normal(int(.2 * SR)), 800, 4000)) * dec(.2, 25), 0.1)
+for t0 in np.arange(11.45, 12.8, 0.25): add(t0, norm(band(rng.standard_normal(int(.04 * SR)), 2500, 8000)) * dec(.04, 90), 0.12, -0.2)
+d = 1.7; add(12.9, norm(band(rng.standard_normal(int(d * SR)), 600, 5000)) * np.interp(tt(d), [0, .15, 1.5, 1.7], [0, 1, 1, 0]), 0.07)
+add(13.6, bell(1046.5, 0.6), 0.08); add(14.5, bell(392, 1.2), 0.06)   # "Parecia."
+# 2 semanas: relógio acelerado, pingos com eco, assobio
+for t0 in np.arange(15.0, 16.8, 0.07): add(t0, np.sin(2 * np.pi * 2400 * tt(.015)) * dec(.015, 300), 0.04)
+for t0 in np.arange(16.8, 21.6, 0.45):
+    p = plink(); add(t0 + 0.4, p, 0.15, 0.3); add(t0 + 0.55, p, 0.05, -0.3)
+for k, f in enumerate([880, 988, 1046, 988, 880]): add(18.5 + k * 0.28, np.sin(2 * np.pi * f * tt(.25)) * np.sin(np.linspace(0, np.pi, int(.25 * SR))), 0.025, 0.6)
 # infiltração na laje
-d = 3.5; add(18, norm(band(rng.standard_normal(int(d * SR)), 60, 400)) * np.interp(tt(d), [0, 1, 3.5], [0, 1, 0]), 0.1)
-# diagrama: coluna (dourado) e ramais (azul) acendem; alerta no ponto do vazamento
-add(31, bell(523.3, 1.4), 0.12); add(35.2, bell(659.3, 1.4), 0.12)
-for t0 in np.arange(41.5, 45.5, 0.5): add(t0, np.sin(2 * np.pi * 880 * tt(.08)) * dec(.08, 30), 0.05)
-for t0 in (50.6, 51.4, 52.2): add(t0, norm(band(rng.standard_normal(int(.05 * SR)), 900, 2500)) * dec(.05, 90), 0.25)
-add(53.0, bell(880, 1.4) + 0.5 * bell(1318.5, 1.4), 0.14)
-add(56.6, bell(523.3, 2) + bell(659.3, 2) + bell(784, 2), 0.08)
+d = 2.4; add(21.6, norm(band(rng.standard_normal(int(d * SR)), 60, 400)) * np.interp(tt(d), [0, .6, 2.4], [0, 1, 0]), 0.12)
+for c in (24.0, 31.0, 56.0): add(c - 0.3, whoosh(), 0.14)
+# raio-X: varredura, coluna, ramais com água correndo
+d = 0.9; t = tt(d); add(31.0, np.sin(2 * np.pi * np.cumsum(np.linspace(300, 1800, len(t))) / SR) * np.sin(np.linspace(0, np.pi, len(t))), 0.04)
+add(32.6, bell(523.3, 1.4), 0.12); add(37.0, bell(659.3, 1.4), 0.12)
+d = 10; add(32.8, norm(band(rng.standard_normal(int(d * SR)), 300, 2500)) * np.interp(tt(d), [0, 1, 9, 10], [0, 1, 1, 0]), 0.025)
+# caso: alerta + papel do recibo
+for t0 in np.arange(43.4, 47.4, 0.5): add(t0, np.sin(2 * np.pi * 880 * tt(.08)) * dec(.08, 30), 0.05)
+add(44.6, norm(band(rng.standard_normal(int(.4 * SR)), 1500, 7000)) * dec(.4, 10), 0.08)
+# pegadinha e teste
+add(48.8, bell(784, 0.8), 0.06)
+for t0 in (52.6, 53.4, 54.2): add(t0, norm(band(rng.standard_normal(int(.05 * SR)), 900, 2500)) * dec(.05, 90), 0.25)
+add(55.0, bell(880, 1.4) + 0.5 * bell(1318.5, 1.4), 0.14)
+add(58.9, bell(523.3, 2) + bell(659.3, 2) + bell(784, 2), 0.08)
 
 fade = np.ones(N); fn = int(1.5 * SR); fade[-fn:] = np.linspace(1, 0, fn)
 L *= fade; R *= fade

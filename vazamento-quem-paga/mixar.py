@@ -1,10 +1,10 @@
 """Junta a narração contínua (narracao-completa.wav ou .mp4) ao vídeo, abaixando a trilha sob a voz.
-Uso: python3 mixar.py [arquivo_da_narracao] [inicio_em_segundos=0.3]  →  reel-vazamento-FINAL.mp4"""
+Uso: python3 mixar.py [arquivo_da_narracao] [inicio_em_segundos=2.0]  →  reel-vazamento-FINAL.mp4"""
 import numpy as np, wave, sys, subprocess
 
 SR = 48000
 src = sys.argv[1] if len(sys.argv) > 1 else "narracao-completa.wav"
-start = float(sys.argv[2]) if len(sys.argv) > 2 else 0.3
+start = float(sys.argv[2]) if len(sys.argv) > 2 else 2.0
 # ffmpeg converte qualquer formato (wav, mp3, m4a, mp4 de celular) para mono 48 kHz
 raw = subprocess.run(["ffmpeg", "-v", "error", "-i", src, "-ac", "1", "-ar", str(SR), "-f", "s16le", "-"], capture_output=True, check=True).stdout
 voice = np.frombuffer(raw, np.int16).astype(np.float32) / 32768
